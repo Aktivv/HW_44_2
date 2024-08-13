@@ -1,7 +1,7 @@
 import logging
 from config import dp, bot, admins
 from aiogram.utils import executor
-from handlers import commands, echo, quiz
+from handlers import commands, echo, quiz, Store
 from db import db_main
 from aiogram import types
 
@@ -18,6 +18,7 @@ async def on_shutdown(_):
 
 commands.register_commands(dp)
 quiz.register_quiz(dp)
+Store.register_fsm(dp)
 
 
 echo.register_echo(dp)
