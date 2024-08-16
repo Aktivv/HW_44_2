@@ -4,6 +4,7 @@ from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
 import buttons
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from db import db_main
 
 sizes = ['S', 'L', 'XL', 'XXL']
 
@@ -12,6 +13,8 @@ class Store(StatesGroup):
     size = State()
     category = State()
     price = State()
+    id_product = State()
+    info_product = State()
     photo = State()
     submit = State()
 
@@ -54,7 +57,23 @@ async def load_price(message: types.Message, state: FSMContext):
         data['price'] = message.text
 
     await Store.next()
-    await message.answer(text='Отправьте фотографию: ')
+    await message.answer(text='Отправьте айди: ')
+
+
+async def load_id(message: types.Message, state: FSMContext):
+    async with state.proxy() as data_store:
+        data_store['id_product'] = message.text
+
+    await Store.next()
+    await message.answer(text='Напишите Информацию товара:')
+
+
+async def load_info(message: types.Message, state: FSMContext):
+    async with state.proxy() as data_store:
+        data_store['info_product'] = message.text
+
+    await Store.next()
+    await message.answer(text='Отправьте фотографию товара:')
 
 
 async def load_photo(message: types.Message, state: FSMContext):
@@ -62,8 +81,8 @@ async def load_photo(message: types.Message, state: FSMContext):
         data['photo'] = message.photo[-1].file_id
 
     keyboard = InlineKeyboardMarkup(row_width=2)
-    yes_button = InlineKeyboardButton(text='Yes', callback_data='confirm_yes')
-    no_button = InlineKeyboardButton(text='No', callback_data='confirm_no')
+    yes_button = InlineKeyboardButton(text='Да', callback_data='confirm_yes')
+    no_button = InlineKeyboardButton(text='Нет', callback_data='confirm_no')
     keyboard.add(yes_button, no_button)
 
     await Store.next()
@@ -71,20 +90,38 @@ async def load_photo(message: types.Message, state: FSMContext):
                                caption=f"Название товара - {data['name']}\n"
                                        f"Размер - {data['size']}\n"
                                        f"Категория - {data['category']}\n"
-                                       f"Стоимость - {data['price']}\n",
+                                       f"Стоимость - {data['price']}\n"
+                                       f"Информация о товаре - {data['info_product']}\n",
+
+
                                reply_markup=keyboard)
 
 
-async def submit(callback_query: types.CallbackQuery, state: FSMContext):
-    kb = types.ReplyKeyboardRemove()
+async def submit(message: types.Message, state: FSMContext):
+    if message.text == "Да":
+        kb = types.ReplyKeyboardRemove()
 
-    if callback_query.data == 'confirm_yes':
-        await callback_query.message.answer('Сохранено в базу',
-                                            reply_markup=kb)
+        async with state.proxy() as data_store:
+            await db_main.sql_insert_products(
+                name=data_store['name'],
+                size=data_store['size'],
+                price=data_store['price'],
+                id_product=data_store['id_product'],
+                photo=data_store['photo']
+            )
+
+            await db_main.sql_insert_products_details(
+                category=data_store['category'],
+                info_product=data_store['info'],
+                id_product=data_store['id_product']
+            )
+
+        await message.answer(text='Ваши данные сохранены!', reply_markup=kb)
         await state.finish()
-    elif callback_query.data == 'confirm_no':
-        await callback_query.message.answer('Отменено!')
+    else:
+        await message.answer(text='Отменено!')
         await state.finish()
+
 
 
 async def cancel_fsm(message: types.Message, state: FSMContext):
@@ -104,6 +141,8 @@ def register_fsm(dp: Dispatcher):
     dp.register_message_handler(load_size, state=Store.size)
     dp.register_message_handler(load_category, state=Store.category)
     dp.register_message_handler(load_price, state=Store.price)
+    dp.register_message_handler(load_id, state=Store.id_product)
+    dp.register_message_handler(load_info, state=Store.info_product)
     dp.register_message_handler(load_photo, state=Store.photo, content_types=['photo'])
     dp.register_callback_query_handler(submit, state=Store.submit)
 
