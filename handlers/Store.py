@@ -8,6 +8,7 @@ from db import db_main
 
 sizes = ['S', 'L', 'XL', 'XXL']
 
+
 class Store(StatesGroup):
     name = State()
     size = State()
@@ -15,6 +16,7 @@ class Store(StatesGroup):
     price = State()
     id_product = State()
     info_product = State()
+    collection_product = State()
     photo = State()
     submit = State()
 
@@ -41,7 +43,7 @@ async def load_size(message: types.Message, state: FSMContext):
         await message.answer('Только кнопки!!!')
 
     await Store.next()
-    await message.answer(text='Категория: ')
+    await message.answer(text='Категория: ', reply_markup=buttons.cancel)
 
 
 async def load_category(message: types.Message, state: FSMContext):
@@ -73,6 +75,14 @@ async def load_info(message: types.Message, state: FSMContext):
         data_store['info_product'] = message.text
 
     await Store.next()
+    await message.answer(text='Отправьте коллекцию товара:')
+
+
+async def load_collection(message: types.Message, state: FSMContext):
+    async with state.proxy() as data_store:
+        data_store['collection_product'] = message.text
+
+    await Store.next()
     await message.answer(text='Отправьте фотографию товара:')
 
 
@@ -91,16 +101,17 @@ async def load_photo(message: types.Message, state: FSMContext):
                                        f"Размер - {data['size']}\n"
                                        f"Категория - {data['category']}\n"
                                        f"Стоимость - {data['price']}\n"
-                                       f"Информация о товаре - {data['info_product']}\n",
+                                       f"Информация о товаре - {data['info_product']}\n"
+                                       f"Коллекия - {data['collection_product']}\n",
 
 
                                reply_markup=keyboard)
 
 
-async def submit(message: types.Message, state: FSMContext):
-    if message.text == "Да":
-        kb = types.ReplyKeyboardRemove()
+async def submit(callback_query: types.CallbackQuery, state: FSMContext):
+    if callback_query.data == 'confirm_yes':
 
+        await callback_query.message.answer('Отлично! Регистрация заказа пройдена.', reply_markup=buttons.remove)
         async with state.proxy() as data_store:
             await db_main.sql_insert_products(
                 name=data_store['name'],
@@ -112,23 +123,26 @@ async def submit(message: types.Message, state: FSMContext):
 
             await db_main.sql_insert_products_details(
                 category=data_store['category'],
-                info_product=data_store['info'],
+                info_product=data_store['info_product'],
                 id_product=data_store['id_product']
             )
 
-        await message.answer(text='Ваши данные сохранены!', reply_markup=kb)
-        await state.finish()
-    else:
-        await message.answer(text='Отменено!')
-        await state.finish()
+            await db_main.sql_insert_collection_products(
+                product_id = data_store['id_product'],
+                collection = data_store['collection_product'],
 
+            )
+        await state.finish()
+    elif callback_query.data == 'confirm_no':
+        await callback_query.message.answer('Отменено!', reply_markup=buttons.remove)
+        await state.finish()
 
 
 async def cancel_fsm(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
     if current_state is not None:
         await state.finish()
-        await message.answer(text='Отменено!')
+        await message.answer(text='Отменено!', reply_markup=buttons.cancel)
 
 
 def register_fsm(dp: Dispatcher):
@@ -143,6 +157,7 @@ def register_fsm(dp: Dispatcher):
     dp.register_message_handler(load_price, state=Store.price)
     dp.register_message_handler(load_id, state=Store.id_product)
     dp.register_message_handler(load_info, state=Store.info_product)
+    dp.register_message_handler(load_collection, state=Store.collection_product)
     dp.register_message_handler(load_photo, state=Store.photo, content_types=['photo'])
     dp.register_callback_query_handler(submit, state=Store.submit)
 

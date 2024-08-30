@@ -1,0 +1,14 @@
+version: '3.10'
+
+services:
+  bot:
+    build:  .
+    container_name: ls_44_2
+    volumes:
+      - .:/app
+      - db_data:/app/db
+    command: python main.py
+
+volumes:
+  db_data:
+
